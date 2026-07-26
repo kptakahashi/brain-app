@@ -353,3 +353,9 @@ nav#tabbar button.active { color: var(--accent); }
 .callout ol { padding-left: 18px; color: var(--text-2); }
 .modal-body textarea { font-size: 12.5px; line-height: 1.6; }
 .quiz-card svg.q-img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border); display: block; }
+
+/* 未実行の依頼を目立たせる */
+.badge.amber { background: var(--amber-soft); color: var(--amber); }
+.run-banner { border-left: 3px solid var(--amber); }
+.run-banner .title { color: var(--amber); }
+#pending-badge { cursor: pointer; }

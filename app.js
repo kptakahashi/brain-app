@@ -101,6 +101,7 @@ let cardsSha = null;
 let playlist = [];
 let session = null;
 let online = navigator.onLine;
+let pendingTaskCount = 0;
 
 // ---------------------------------------------------------------- 起動
 async function boot() {
@@ -153,8 +154,12 @@ function setNet(ok) {
 async function updatePendingBadge() {
   const q = await DB.qAll();
   const badge = $("#pending-badge");
-  badge.hidden = q.length === 0;
-  badge.textContent = `未送信 ${q.length}`;
+  const parts = [];
+  if (q.length) parts.push(`未送信 ${q.length}`);
+  if (pendingTaskCount) parts.push(`未実行 ${pendingTaskCount}`);
+  badge.hidden = parts.length === 0;
+  badge.textContent = parts.join(" / ");
+  badge.dataset.action = "goto-explore";
   const due = cards.filter((c) => (c.srs?.due || "9999") <= today()).length;
   const tb = $("#train-badge");
   tb.hidden = !due;
@@ -213,6 +218,24 @@ async function flushQueue() {
 }
 
 // ---------------------------------------------------------------- タスク(AI依頼)
+const WORKER_PROMPT = `brain/WORKER.md に従って、brain/tasks/pending/ の未処理の依頼をすべて処理してください。
+
+処理が終わったら、何をどこに保存したかを簡潔に報告してください。`;
+
+/** 溜まった依頼をClaude Codeで実行させる(指示文をコピーしてClaudeを開く) */
+async function runWorker() {
+  try {
+    await navigator.clipboard.writeText(WORKER_PROMPT);
+    toast("指示文をコピーしました。Claudeアプリで貼り付けて送信してください。", 6000);
+    setTimeout(() => window.open("https://claude.ai/code", "_blank", "noopener"), 500);
+  } catch {
+    $("#modal-title").textContent = "この文をClaudeに送ってください";
+    $("#modal-body").innerHTML = `<p class="hint">ClaudeアプリのCodeタブでリポジトリ Thinking を選び、下の文を送ります。</p>
+      <textarea rows="6" readonly>${esc(WORKER_PROMPT)}</textarea>`;
+    $("#modal").hidden = false;
+  }
+}
+
 async function createTask(type, title, payload) {
   const id = `${stamp()}_${type}`;
   const task = { id, type, title, payload, created: new Date().toISOString(), status: "pending" };
@@ -222,7 +245,10 @@ async function createTask(type, title, payload) {
     text: JSON.stringify(task, null, 1),
     message: `brain: 依頼 ${type} — ${title}`.slice(0, 70),
   });
-  if (ok) toast("依頼を登録しました。Claudeが処理すると結果がVaultに入ります。");
+  if (ok) {
+    switchView("explore");
+    toast("依頼を登録しました。「Claudeで今すぐ実行する」を押すと処理が始まります。", 6000);
+  }
   refresh();
   return task;
 }
@@ -233,6 +259,8 @@ async function listTasks() {
     out.pending = (await GH.listDir(P.pending)).filter((f) => f.name.endsWith(".json"));
     const done = (await GH.listDir(P.done)).filter((f) => f.name.endsWith(".json"));
     out.done = done.sort((a, b) => (a.name < b.name ? 1 : -1)).slice(0, 8);
+    pendingTaskCount = out.pending.length;
+    updatePendingBadge();
   } catch {}
   return out;
 }
@@ -309,10 +337,18 @@ async function renderCapture() {
 async function renderExplore() {
   const t = await listTasks();
   const label = { ingest: "記録の判定", research: "リサーチ", connect: "点と点", lint: "週次Lint", learn: "音声生成", cards: "カード生成" };
-  let html = t.pending
+  let html = "";
+  if (t.pending.length) {
+    html += `<div class="card run-banner">
+      <div class="title">${t.pending.length}件の依頼が未実行です</div>
+      <div class="meta">依頼はGitHubに記録済みですが、AIはまだ動いていません。下のボタンでClaudeに実行させてください(数分で完了します)。</div>
+      <div class="actions"><button class="ok" data-action="run-worker">Claudeで今すぐ実行する</button></div>
+    </div>`;
+  }
+  html += t.pending
     .map(
       (f) => `<div class="card">
-      <div><span class="badge running"><span class="spinner"></span>処理待ち</span>${esc(f.name.replace(/\.json$/, ""))}</div>
+      <div><span class="badge amber">未実行</span>${esc(f.name.replace(/\.json$/, ""))}</div>
       <div class="actions"><button class="warn" data-action="cancel-task" data-path="${esc(f.path)}" data-name="${esc(f.name)}">キャンセル</button></div>
     </div>`
     )
@@ -829,6 +865,9 @@ document.addEventListener("click", async (ev) => {
   else if (a === "reveal") { session.revealed = true; renderQuiz(); }
   else if (a === "grade") grade(el.dataset.g);
   else if (a === "train-quit") quitTrain();
+
+  else if (a === "run-worker") runWorker();
+  else if (a === "goto-explore") switchView("explore");
 
   else if (a === "cancel-task") {
     if (!confirm(`この依頼をキャンセルしますか?\n\n${el.dataset.name}`)) return;
