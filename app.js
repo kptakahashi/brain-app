@@ -294,9 +294,12 @@ async function renderCapture() {
   html += files
     .slice(0, 12)
     .map(
-      (f) => `<div class="card clickable" data-action="open-note" data-path="${esc(f.path)}">
-        <div class="title">${esc(f.name.replace(/\.md$/, ""))}</div>
-        <div class="meta">${(f.size / 1024).toFixed(1)}KB</div></div>`
+      (f) => `<div class="card">
+        <div class="title clickable" data-action="open-note" data-path="${esc(f.path)}">${esc(f.name.replace(/\.md$/, ""))}</div>
+        <div class="actions">
+          <button data-action="open-note" data-path="${esc(f.path)}">読む</button>
+          <button class="warn" data-action="delete-file" data-path="${esc(f.path)}" data-label="${esc(f.name)}">削除</button>
+        </div></div>`
     )
     .join("");
   $("#capture-list").innerHTML = html || EMPTY("まだ記録はありません。");
@@ -307,10 +310,20 @@ async function renderExplore() {
   const t = await listTasks();
   const label = { ingest: "記録の判定", research: "リサーチ", connect: "点と点", lint: "週次Lint", learn: "音声生成", cards: "カード生成" };
   let html = t.pending
-    .map((f) => `<div class="card"><span class="badge running"><span class="spinner"></span>処理待ち</span>${esc(f.name.replace(/\.json$/, ""))}</div>`)
+    .map(
+      (f) => `<div class="card">
+      <div><span class="badge running"><span class="spinner"></span>処理待ち</span>${esc(f.name.replace(/\.json$/, ""))}</div>
+      <div class="actions"><button class="warn" data-action="cancel-task" data-path="${esc(f.path)}" data-name="${esc(f.name)}">キャンセル</button></div>
+    </div>`
+    )
     .join("");
   html += t.done
-    .map((f) => `<div class="card"><span class="badge done">完了</span>${esc(f.name.replace(/\.json$/, ""))}</div>`)
+    .map(
+      (f) => `<div class="card">
+      <div><span class="badge done">完了</span>${esc(f.name.replace(/\.json$/, ""))}</div>
+      <div class="actions"><button data-action="delete-file" data-path="${esc(f.path)}" data-label="この履歴">履歴を消す</button></div>
+    </div>`
+    )
     .join("");
   $("#explore-tasks").innerHTML = html || EMPTY("依頼はありません。");
 
@@ -329,6 +342,7 @@ async function renderExplore() {
         <div class="actions">
           <button data-action="open-note" data-path="${esc(f.path)}">読む</button>
           <button class="ok" data-action="note-to-audio" data-path="${esc(f.path)}" data-title="${esc(title)}">音声にする</button>
+          <button class="warn" data-action="delete-file" data-path="${esc(f.path)}" data-label="${esc(title)}">削除</button>
         </div></div>`;
       })
       .join("") || EMPTY("まだリサーチノートはありません。");
@@ -347,8 +361,9 @@ async function renderLearn() {
         <div class="actions">
           ${has
             ? `<button class="ok" data-action="play" data-file="${esc(a.file)}" data-title="${esc(a.title)}">▶ 再生</button>
-               <button data-action="audio-del" data-file="${esc(a.file)}">端末から削除</button>`
+               <button data-action="audio-del" data-file="${esc(a.file)}">端末から消す</button>`
             : `<button class="ok" data-action="audio-dl" data-file="${esc(a.file)}" data-title="${esc(a.title)}">ダウンロード</button>`}
+          <button class="warn" data-action="audio-delete-all" data-id="${esc(a.id)}" data-file="${esc(a.file)}" data-title="${esc(a.title)}">完全に削除</button>
         </div></div>`;
       })
       .join("") || EMPTY("まだ音声はありません。テーマから依頼してください。");
@@ -814,6 +829,54 @@ document.addEventListener("click", async (ev) => {
   else if (a === "reveal") { session.revealed = true; renderQuiz(); }
   else if (a === "grade") grade(el.dataset.g);
   else if (a === "train-quit") quitTrain();
+
+  else if (a === "cancel-task") {
+    if (!confirm(`この依頼をキャンセルしますか?\n\n${el.dataset.name}`)) return;
+    el.disabled = true;
+    try {
+      await GH.deleteFile(el.dataset.path, `brain: 依頼をキャンセル ${el.dataset.name}`);
+      toast("キャンセルしました");
+    } catch (e) {
+      toast(e.status === 0 ? "電波がないためキャンセルできません" : "失敗: " + e.message);
+    }
+    el.disabled = false;
+    refresh();
+  }
+
+  else if (a === "delete-file") {
+    const label = el.dataset.label || el.dataset.path;
+    if (!confirm(`削除しますか?\n\n${label}\n\n※GitHubの履歴には残るので、後から復元は可能です。`)) return;
+    el.disabled = true;
+    try {
+      await GH.deleteFile(el.dataset.path, `brain: 削除 ${label}`);
+      toast("削除しました");
+    } catch (e) {
+      toast(e.status === 0 ? "電波がないため削除できません" : "失敗: " + e.message);
+    }
+    el.disabled = false;
+    refresh();
+  }
+
+  else if (a === "audio-delete-all") {
+    const title = el.dataset.title;
+    if (!confirm(`この音声を完全に削除しますか?\n\n${title}\n\n端末からもGitHubからも消えます。`)) return;
+    el.disabled = true;
+    try {
+      await DB.audioDel(el.dataset.file);
+      await GH.deleteFile(`${P.audioDir}/${el.dataset.file}`, `brain: 音声を削除 ${title}`).catch(() => {});
+      playlist = await GH.updateJSON(
+        P.playlist, [],
+        (list) => (Array.isArray(list) ? list : []).filter((x) => x.id !== el.dataset.id),
+        `brain: プレイリストから削除 ${title}`
+      );
+      await DB.set("playlist", playlist);
+      toast("削除しました");
+    } catch (e) {
+      toast(e.status === 0 ? "電波がないため削除できません" : "失敗: " + e.message);
+    }
+    el.disabled = false;
+    renderLearn();
+  }
 
   else if (a === "audio-dl") downloadAudio(el.dataset.file, el.dataset.title);
   else if (a === "audio-del") { await DB.audioDel(el.dataset.file); renderLearn(); }
