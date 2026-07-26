@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 
@@ -125,6 +125,12 @@
       </select>
       <button class="primary" data-action="task-learn">依頼</button>
     </div>
+    <details id="note-picker">
+      <summary>Vaultのノートを選んで音声化する</summary>
+      <input id="note-search" placeholder="ノート名で絞り込み(例: リサーチ、意図的訓練)">
+      <div id="note-list" class="note-list"></div>
+      <button class="primary small" data-action="learn-notes">選んだノートを音声化</button>
+    </details>
     <div class="row-between">
       <h2>プレイリスト</h2>
       <div class="seg tiny" id="speed-toggle">
@@ -216,7 +222,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="gh.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="gh.js?v=11"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

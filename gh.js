@@ -137,6 +137,18 @@ const GH = (() => {
     return await res.blob();
   }
 
+  /** リポジトリ全体のファイル一覧を1回の通信で取得 → [{path, type, size}] */
+  async function getTree() {
+    const c = loadCfg();
+    const res = await request(
+      `${API}/repos/${c.owner}/${c.repo}/git/trees/${encodeURIComponent(branch())}?recursive=1`,
+      { headers: headers({ Accept: "application/vnd.github+json" }), cache: "no-store" }
+    );
+    if (!res.ok) throw new GHError(`一覧取得失敗 (${res.status})`, res.status);
+    const j = await res.json();
+    return Array.isArray(j.tree) ? j.tree : [];
+  }
+
   /** ディレクトリ一覧 → [{name, path, size, type}] / 無ければ [] */
   async function listDir(path) {
     const res = await request(
@@ -234,7 +246,7 @@ const GH = (() => {
 
   return {
     loadCfg, saveCfg, clearCfg, configured, verify,
-    getFile, getJSON, getBlob, listDir,
+    getFile, getJSON, getBlob, listDir, getTree,
     putFile, updateJSON, deleteFile,
     GHError,
   };

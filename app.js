@@ -322,10 +322,15 @@ async function renderExplore() {
   $("#research-notes").innerHTML =
     notes
       .slice(0, 10)
-      .map(
-        (f) => `<div class="card clickable" data-action="open-note" data-path="${esc(f.path)}">
-        <div class="title">${esc(f.name.replace(/\.md$/, ""))}</div></div>`
-      )
+      .map((f) => {
+        const title = f.name.replace(/\.md$/, "");
+        return `<div class="card">
+        <div class="title clickable" data-action="open-note" data-path="${esc(f.path)}">${esc(title)}</div>
+        <div class="actions">
+          <button data-action="open-note" data-path="${esc(f.path)}">読む</button>
+          <button class="ok" data-action="note-to-audio" data-path="${esc(f.path)}" data-title="${esc(title)}">音声にする</button>
+        </div></div>`;
+      })
       .join("") || EMPTY("まだリサーチノートはありません。");
 }
 
@@ -347,6 +352,48 @@ async function renderLearn() {
         </div></div>`;
       })
       .join("") || EMPTY("まだ音声はありません。テーマから依頼してください。");
+}
+
+// ---- Vaultノートを選んで音声化 ----
+let noteTree = null;
+
+async function loadNoteTree() {
+  const box = $("#note-list");
+  box.innerHTML = `<div class="empty"><span class="spinner"></span>ノート一覧を読み込み中…</div>`;
+  try {
+    const tree = await GH.getTree();
+    noteTree = tree
+      .filter(
+        (f) =>
+          f.type === "blob" &&
+          f.path.startsWith(P.vault + "/") &&
+          f.path.endsWith(".md") &&
+          !/\/(_inbox|00_assets|_archive|_stubs)\//.test(f.path) &&
+          !/sync-conflict/.test(f.path)
+      )
+      .map((f) => ({ path: f.path, name: f.path.split("/").pop().replace(/\.md$/, ""), dir: f.path.split("/").slice(2, -1).join("/") }))
+      .sort((a, b) => (a.path < b.path ? 1 : -1));
+    await DB.set("noteTree", noteTree);
+  } catch {
+    noteTree = (await DB.get("noteTree")) || [];
+    if (!noteTree.length) {
+      box.innerHTML = EMPTY("一覧を取得できませんでした(オフラインの可能性)");
+      return;
+    }
+  }
+  renderNoteList("");
+}
+
+function renderNoteList(filter) {
+  const q = filter.trim().toLowerCase();
+  const hits = (noteTree || []).filter((n) => !q || n.name.toLowerCase().includes(q) || n.dir.toLowerCase().includes(q));
+  $("#note-list").innerHTML =
+    hits
+      .slice(0, 60)
+      .map(
+        (n) => `<label><input type="checkbox" value="${esc(n.path)}"><div>${esc(n.name)}<div class="np">${esc(n.dir)}</div></div></label>`
+      )
+      .join("") || EMPTY("該当するノートがありません");
 }
 
 async function downloadAudio(file, title) {
@@ -597,20 +644,18 @@ function quitTrain() {
 }
 
 // ---------------------------------------------------------------- 対話(Claude Codeへ引き継ぎ)
-const THINK_PROMPT = (topic) => `あなたは私のObsidian vault(このリポジトリの vault/メモ/)の思考トレーナーです。
-まず vault/メモ/CLAUDE.md と vault/メモ/_新構造/_AI_DIGEST.md を読んで、規約を厳守してください。特に:
-- §8 3段ラリー方式(既定は基本段)と「安易に答えを出さない」ストレッチ原則
-- §8.5 Why so? / So what? による思考の深さチェック
-- 詰まったらvault内の関連ノート2-3件を[[wikilink]]で示す(答えは渡さない)
-- 1回の返答は3-6行(スマホで読む)。一度に問うのは1つだけ
+const THINK_PROMPT = (topic) => `thinking-session スキルを使って、思考セッションを始めてください。
 
-05_セッション/_TEMPLATE_セッション.md の7セクション(観察→立場目的→論点→アブダクション→演繹→帰納→結論)で進行してください。
+スキルの「手順0: 文脈をロードする」を必ず実行してから最初の問いを出してください。具体的には:
+1. vault/メモ/_新構造/_AI_DIGEST.md(全ノートの地図)
+2. vault/メモ/_memory/ の全ファイル(過去に確立した原則)
+3. vault/メモ/05_セッション/ の直近3件(前回までの思考の続き)
+これらを読まずに始めないでください。
 
 今日考えたいテーマ:
 ${topic}
 
-まず①観察した事象の解像度を上げる短い問いから始めてください。
-(セッション終了時に私が「保存して」と言ったら、05_セッション/${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}/ に規約どおり保存し、参照ノートのbacklinkとuse_countも更新してコミットしてください)`;
+読み込みの報告は不要です。①観察した事象の解像度を上げる短い問い(3-6行)から始めてください。`;
 
 async function renderThink() {
   let items = [];
@@ -735,6 +780,26 @@ document.addEventListener("click", async (ev) => {
     $("#research-q").value = "";
     createTask("research", q.slice(0, 50), { question: q });
   }
+  else if (a === "note-to-audio") {
+    createTask("learn", "音声化: " + el.dataset.title.slice(0, 34), {
+      paths: [el.dataset.path],
+      topic: el.dataset.title,
+      style: learnStyle,
+      minutes: 10,
+    });
+  }
+  else if (a === "learn-notes") {
+    const paths = $$("#note-list input:checked").map((c) => c.value);
+    if (!paths.length) return toast("ノートを選んでください");
+    const first = paths[0].split("/").pop().replace(/\.md$/, "");
+    $("#note-picker").open = false;
+    $$("#note-list input:checked").forEach((c) => (c.checked = false));
+    createTask("learn", "音声化: " + first.slice(0, 30) + (paths.length > 1 ? ` 他${paths.length - 1}件` : ""), {
+      paths,
+      style: learnStyle,
+      minutes: parseInt($("#learn-minutes").value),
+    });
+  }
   else if (a === "task-connect") createTask("connect", "点と点を結ぶ分析", { mode: "connect_dots" });
   else if (a === "task-lint") createTask("lint", "週次Lint", { mode: "weekly_lint" });
   else if (a === "task-cards") createTask("cards", "カード生成", { limit: 20 });
@@ -794,6 +859,13 @@ $("#style-toggle").addEventListener("click", (e) => {
   learnStyle = b.dataset.style;
   $$("#style-toggle button").forEach((x) => x.classList.toggle("active", x === b));
 });
+$("#note-picker").addEventListener("toggle", (e) => {
+  if (e.target.open && !noteTree) loadNoteTree();
+});
+$("#note-search").addEventListener("input", (e) => {
+  if (noteTree) renderNoteList(e.target.value);
+});
+
 $("#speed-toggle").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   speed = parseFloat(b.dataset.s);
