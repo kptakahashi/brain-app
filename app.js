@@ -341,7 +341,8 @@ async function renderExplore() {
   if (t.pending.length) {
     html += `<div class="card run-banner">
       <div class="title"><span class="spinner"></span>${t.pending.length}件を自動処理中</div>
-      <div class="meta">依頼を受け付けました。AIが自動で処理しています(リサーチは10〜20分、音声は5〜10分)。この画面を閉じても処理は続きます。</div>
+      <div class="meta">依頼した直後から処理が始まっています。この画面を閉じても続きます。結果は数分後にここへ届きます。</div>
+      <div class="actions"><button data-action="run-now">処理の状況を見る</button></div>
     </div>`;
   }
   html += t.pending
@@ -885,6 +886,10 @@ document.addEventListener("click", async (ev) => {
   else if (a === "train-quit") quitTrain();
 
   else if (a === "run-worker") runWorker();
+  else if (a === "run-now") {
+    toast("実行ログを開きます。止まっている場合はここから手動で実行できます。", 5000);
+    window.open("https://claude.ai/code/routines", "_blank", "noopener");
+  }
   else if (a === "goto-explore") switchView("explore");
 
   else if (a === "cancel-task") {
