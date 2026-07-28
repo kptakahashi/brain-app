@@ -156,7 +156,7 @@ async function updatePendingBadge() {
   const badge = $("#pending-badge");
   const parts = [];
   if (q.length) parts.push(`未送信 ${q.length}`);
-  if (pendingTaskCount) parts.push(`未実行 ${pendingTaskCount}`);
+  if (pendingTaskCount) parts.push(`処理中 ${pendingTaskCount}`);
   badge.hidden = parts.length === 0;
   badge.textContent = parts.join(" / ");
   badge.dataset.action = "goto-explore";
@@ -247,7 +247,7 @@ async function createTask(type, title, payload) {
   });
   if (ok) {
     switchView("explore");
-    toast("依頼を登録しました。「Claudeで今すぐ実行する」を押すと処理が始まります。", 6000);
+    toast("受け付けました。AIが自動で処理します。完了するとここに結果が出ます。", 6000);
   }
   refresh();
   return task;
@@ -340,26 +340,44 @@ async function renderExplore() {
   let html = "";
   if (t.pending.length) {
     html += `<div class="card run-banner">
-      <div class="title">${t.pending.length}件の依頼が未実行です</div>
-      <div class="meta">依頼はGitHubに記録済みですが、AIはまだ動いていません。下のボタンでClaudeに実行させてください(数分で完了します)。</div>
-      <div class="actions"><button class="ok" data-action="run-worker">Claudeで今すぐ実行する</button></div>
+      <div class="title"><span class="spinner"></span>${t.pending.length}件を自動処理中</div>
+      <div class="meta">依頼を受け付けました。AIが自動で処理しています(リサーチは10〜20分、音声は5〜10分)。この画面を閉じても処理は続きます。</div>
     </div>`;
   }
   html += t.pending
     .map(
       (f) => `<div class="card">
-      <div><span class="badge amber">未実行</span>${esc(f.name.replace(/\.json$/, ""))}</div>
+      <div><span class="badge running"><span class="spinner"></span>処理中</span>${esc(f.name.replace(/\.json$/, ""))}</div>
       <div class="actions"><button class="warn" data-action="cancel-task" data-path="${esc(f.path)}" data-name="${esc(f.name)}">キャンセル</button></div>
     </div>`
     )
     .join("");
-  html += t.done
-    .map(
-      (f) => `<div class="card">
-      <div><span class="badge done">完了</span>${esc(f.name.replace(/\.json$/, ""))}</div>
-      <div class="actions"><button data-action="delete-file" data-path="${esc(f.path)}" data-label="この履歴">履歴を消す</button></div>
-    </div>`
-    )
+  const dones = await Promise.all(
+    t.done.slice(0, 6).map(async (f) => {
+      let d = null;
+      try { d = (await GH.getJSON(f.path, null)).data; } catch {}
+      return { f, d };
+    })
+  );
+  html += dones
+    .map(({ f, d }) => {
+      const err = d && d.status === "error";
+      const r = (d && d.result) || {};
+      const body = err
+        ? `<div class="meta" style="color:var(--err)">${esc(d.error || "エラー")}</div>`
+        : r.summary || r.message_for_user
+        ? `<div class="meta">${esc(r.summary || r.message_for_user)}</div>`
+        : "";
+      const open = r.saved_path
+        ? `<button data-action="open-note" data-path="${esc(r.saved_path)}">結果を見る</button>`
+        : "";
+      return `<div class="card">
+      <div><span class="badge ${err ? "error" : "done"}">${err ? "エラー" : "完了"}</span>${esc((d && d.title) || f.name.replace(/\.json$/, ""))}</div>
+      ${body}
+      <div class="actions">${open}
+        <button data-action="delete-file" data-path="${esc(f.path)}" data-label="この履歴">履歴を消す</button></div>
+    </div>`;
+    })
     .join("");
   $("#explore-tasks").innerHTML = html || EMPTY("依頼はありません。");
 
