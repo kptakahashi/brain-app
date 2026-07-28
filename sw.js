@@ -6,14 +6,14 @@
  *  - HTMLはネット優先(3秒でタイムアウト→キャッシュ)。PCやGitHubに繋がる時は常に最新。
  *  - GitHub APIと音声Blobはキャッシュしない(アプリ側がIndexedDBで管理)。
  */
-const VERSION = "v15";
+const VERSION = "v16";
 const SHELL = "brain-shell-" + VERSION;
 const FILES = [
   "./",
   "./index.html",
-  "./style.css?v=15",
-  "./app.js?v=15",
-  "./gh.js?v=15",
+  "./style.css?v=16",
+  "./app.js?v=16",
+  "./gh.js?v=16",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",

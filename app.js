@@ -333,25 +333,49 @@ async function renderCapture() {
   $("#capture-list").innerHTML = html || EMPTY("まだ記録はありません。");
 }
 
+// 依頼ファイル名(YYYY-MM-DD_HHMMSS_type.json)から経過分数と種類を取り出す
+const TASK_LABEL = { ingest: "記録の判定", research: "リサーチ", connect: "点と点", lint: "週次Lint", learn: "音声生成", cards: "カード生成" };
+// 実測ベースの目安(分)。これを超えたら詰まっている可能性を伝える
+const TASK_ETA = { ingest: 5, research: 15, connect: 10, lint: 8, learn: 12, cards: 8 };
+
+function taskInfo(name) {
+  const m = name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})_(\w+)\.json$/);
+  if (!m) return { kind: "", label: "", mins: null, eta: 12 };
+  const at = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
+  const mins = Math.max(0, Math.floor((Date.now() - at) / 60000));
+  const kind = m[7];
+  return { kind, label: TASK_LABEL[kind] || kind, mins, eta: TASK_ETA[kind] || 12 };
+}
+
 // ---------------------------------------------------------------- 探る
 async function renderExplore() {
   const t = await listTasks();
-  const label = { ingest: "記録の判定", research: "リサーチ", connect: "点と点", lint: "週次Lint", learn: "音声生成", cards: "カード生成" };
+  const label = TASK_LABEL;
   let html = "";
   if (t.pending.length) {
+    const infos = t.pending.map((f) => taskInfo(f.name));
+    const oldest = infos.reduce((a, b) => (b.mins > a.mins ? b : a), infos[0]);
+    const stuck = oldest.mins != null && oldest.mins > oldest.eta;
     html += `<div class="card run-banner">
       <div class="title"><span class="spinner"></span>${t.pending.length}件を自動処理中</div>
-      <div class="meta">依頼した直後から処理が始まっています。この画面を閉じても続きます。結果は数分後にここへ届きます。</div>
+      <div class="meta">${
+        stuck
+          ? `${oldest.mins}分経過しています。目安(${oldest.eta}分)を超えました。まだ処理中の可能性もありますが、下のボタンで実行ログを確認できます。`
+          : `依頼した直後から処理は始まっています。目安は${oldest.eta}分ほど。この画面を閉じても続きます。`
+      }</div>
       <div class="actions"><button data-action="run-now">処理の状況を見る</button></div>
     </div>`;
   }
   html += t.pending
-    .map(
-      (f) => `<div class="card">
-      <div><span class="badge running"><span class="spinner"></span>処理中</span>${esc(f.name.replace(/\.json$/, ""))}</div>
+    .map((f) => {
+      const i = taskInfo(f.name);
+      const over = i.mins != null && i.mins > i.eta;
+      return `<div class="card">
+      <div><span class="badge ${over ? "amber" : "running"}"><span class="spinner"></span>処理中</span>${esc(i.label || f.name.replace(/\.json$/, ""))}</div>
+      <div class="meta">${i.mins != null ? `${i.mins}分経過 / 目安${i.eta}分` : ""}</div>
       <div class="actions"><button class="warn" data-action="cancel-task" data-path="${esc(f.path)}" data-name="${esc(f.name)}">キャンセル</button></div>
-    </div>`
-    )
+    </div>`;
+    })
     .join("");
   const dones = await Promise.all(
     t.done.slice(0, 6).map(async (f) => {
