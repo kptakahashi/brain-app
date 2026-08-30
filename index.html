@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 
@@ -71,19 +71,13 @@
   <!-- ============ 知る ============ -->
   <section id="view-news" class="view" hidden>
     <h2 class="first">今日のインプット<span class="h-note" id="news-date"></span></h2>
-    <div class="seg" id="news-filter">
-      <button data-nk="all" class="active">すべて</button>
-      <button data-nk="watch">ウォッチ</button>
-      <button data-nk="theme">テーマ</button>
-      <button data-nk="serendipity">偶然</button>
-    </div>
     <div id="news-list" class="cards"></div>
     <div id="news-report"></div>
     <div class="btn-row">
-      <button class="ghost" data-action="news-older">前の日を見る</button>
+      <button class="ghost" data-action="news-older">前の日</button>
       <button class="ghost" data-action="news-reload">取り直す</button>
     </div>
-    <p class="hint">毎朝5時に自動で更新されます。「深掘る」を押すとディープリサーチの依頼になり、Vaultに保存されます。</p>
+    <p class="hint">毎朝5時に自動更新。見出しをタップすると要約と「なぜ自分に関係するか」が読めます。</p>
   </section>
 
   <section id="view-explore" class="view" hidden>
@@ -222,12 +216,12 @@
 </div>
 
 <nav id="tabbar" hidden>
-  <button data-view="news"><svg><use href="#i-globe"/></svg>知る<span id="news-badge" class="nav-badge" hidden></span></button>
+  <button data-view="news" class="active"><svg><use href="#i-globe"/></svg>知る<span id="news-badge" class="nav-badge" hidden></span></button>
   <button data-view="explore"><svg><use href="#i-scope"/></svg>探る</button>
-  <button data-view="capture" class="active"><svg><use href="#i-pen"/></svg>記録</button>
+  <button data-view="capture"><svg><use href="#i-pen"/></svg>記す</button>
   <button data-view="learn"><svg><use href="#i-headphones"/></svg>聴く</button>
   <button data-view="train"><svg><use href="#i-dumbbell"/></svg>鍛える<span id="train-badge" class="nav-badge" hidden></span></button>
-  <button data-view="think"><svg><use href="#i-chat"/></svg>対話</button>
+  <button data-view="think"><svg><use href="#i-chat"/></svg>考える</button>
 </nav>
 
 <div id="modal" class="modal" hidden>
@@ -242,7 +236,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="gh.js?v=18"></script>
-<script src="app.js?v=18"></script>
+<script src="gh.js?v=19"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

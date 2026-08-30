@@ -95,7 +95,7 @@ function fmtTime(iso) {
 const EMPTY = (m) => `<div class="empty">${esc(m)}</div>`;
 
 // ---------------------------------------------------------------- 状態
-let view = "capture";
+let view = "news";
 let captureKind = "input";
 let learnStyle = "dialogue";
 let speed = parseFloat(localStorage.getItem("brain_speed") || "1.2");
@@ -293,7 +293,6 @@ async function refresh() {
 // ---------------------------------------------------------------- 知る(ニュース)
 let newsData = null;      // 表示中の日のデータ
 let newsDay = null;       // null=latest.json、"YYYY-MM-DD"=その日
-let newsFilter = "all";
 let newsDays = null;      // brain/news にある日付の一覧(降順)
 
 const NEWS_KIND = {
@@ -353,55 +352,74 @@ async function renderNews() {
 
   dateEl.textContent = d.date || "";
   const items = d.items
-    .filter((it) => newsFilter === "all" || it.kind === newsFilter)
     .map((it, i) => [it, i])
     .sort((a, b) => (NEWS_ORDER[a[0].kind] ?? 9) - (NEWS_ORDER[b[0].kind] ?? 9) || a[1] - b[1])
     .map((x) => x[0]);
   list.innerHTML = items.length
-    ? items.map(newsCard).join("")
-    : '<div class="card"><div class="meta">この区分の記事はありません。</div></div>';
+    ? newsListHtml(items)
+    : '<div class="card"><div class="meta">記事がありません。</div></div>';
 
   // 取得レポート(取れなかったものを隠さない)
   const fr = d.fetch_report || {};
   const warns = fr.warnings || [];
   const failed = fr.sources_failed || [];
+  const nOk = (fr.sources_ok || []).length;
   report.innerHTML =
     warns.length || failed.length
-      ? '<div class="card"><div class="title">取得できなかったもの</div>' +
-        warns.map((w) => '<div class="meta">' + esc(w) + "</div>").join("") +
-        failed.map((f) => '<div class="meta">✕ ' + esc(f.id || "") + " — " + esc(f.reason || "") + "</div>").join("") +
-        "</div>"
+      ? '<details class="np-report"><summary>取得状況: ' + nOk + "件成功・" + failed.length +
+        "件失敗</summary>" +
+        warns.map((w) => '<div class="np-report-line">' + esc(w) + "</div>").join("") +
+        failed.map((f) => '<div class="np-report-line">✕ ' + esc(f.id || "") + " — " + esc(f.reason || "") + "</div>").join("") +
+        "</details>"
+      : nOk
+      ? '<div class="np-report-ok">取得状況: ' + nOk + "件すべて成功</div>"
       : "";
 }
 
-function newsCard(it) {
-  const c = newsCat(it);
-  const lead = (it.summary || [])[0] || "";
+/** 面(セクション)の定義。新聞の紙面にあたる */
+function newsSection(it) {
+  if (it.kind === "serendipity") return { key: "ser", label: "偶然の一本", color: "var(--amber)" };
+  if (it.author) return { key: "who", label: "ウォッチ", color: "var(--accent)" };
+  if (it.theme === "golf") return { key: "golf", label: "ゴルフ", color: "var(--ok)" };
+  if (it.theme === "entertainment") return { key: "ent", label: "エンタメ", color: "var(--cat-ent)" };
+  return { key: "etc", label: "世界から", color: "var(--text-3)" };
+}
+
+const NEWS_SECTION_ORDER = ["who", "golf", "ent", "etc", "ser"];
+
+/** 一覧は見出しのみ。本文はタップしてモーダルで読む */
+function newsListHtml(items) {
+  const groups = new Map();
+  for (const it of items) {
+    const sec = newsSection(it);
+    if (!groups.has(sec.key)) groups.set(sec.key, { sec, list: [] });
+    groups.get(sec.key).list.push(it);
+  }
+  return NEWS_SECTION_ORDER.filter((k) => groups.has(k))
+    .map((k) => {
+      const { sec, list } = groups.get(k);
+      return (
+        '<div class="np-sec" style="--np-c:' + sec.color + '">' +
+        '<span class="np-sec-name">' + esc(sec.label) + "</span>" +
+        '<span class="np-sec-n">' + list.length + "</span></div>" +
+        list.map(newsRow).join("")
+      );
+    })
+    .join("");
+}
+
+function newsRow(it) {
+  const by = [it.author, it.source].filter(Boolean)[0] || "";
   const flag =
     it.confidence && it.confidence !== "high"
       ? '<span class="np-flag">' + (it.confidence === "low" ? "要検証" : "要確認") + "</span>"
       : "";
   return (
     '<article class="np" data-action="news-detail" data-id="' + esc(it.id || "") + '">' +
-    '<div class="np-kicker" style="--np-c:' + c.color + '">' +
-    '<span class="np-dot"></span>' +
-    '<span class="np-cat">' + esc(c.label) + "</span>" +
-    '<span class="np-src">' + esc(it.source || "") + "</span>" +
-    flag +
-    "</div>" +
     '<h3 class="np-head">' + esc(it.title || "") + "</h3>" +
-    (lead ? '<p class="np-lead">' + esc(lead) + "</p>" : "") +
+    '<div class="np-by">' + esc(by) + flag + "</div>" +
     "</article>"
   );
-}
-
-/** 記事の区分 → 見出し語と色。新聞の「面」にあたる */
-function newsCat(it) {
-  if (it.kind === "serendipity") return { label: "偶然の一本", color: "var(--amber)" };
-  if (it.author) return { label: it.author, color: "var(--accent)" };
-  if (it.theme === "golf") return { label: "ゴルフ", color: "var(--ok)" };
-  if (it.theme === "entertainment") return { label: "エンタメ", color: "var(--cat-ent)" };
-  return { label: it.kind === "theme" ? "世界から" : "ウォッチ", color: "var(--text-3)" };
 }
 
 const NEWS_ORDER = { watch: 0, theme: 1, serendipity: 2 };
@@ -410,7 +428,7 @@ const NEWS_ORDER = { watch: 0, theme: 1, serendipity: 2 };
 function newsDetail(id) {
   const it = newsItem(id);
   if (!it) return;
-  const c = newsCat(it);
+  const c = newsSection(it);
   const url = it.primary_url || it.url || "";
   const meta = [it.source, it.author, it.published].filter(Boolean).map(esc).join(" · ");
   const conf = { high: "確度 高", medium: "確度 中", low: "確度 低" }[it.confidence] || "";
@@ -488,17 +506,6 @@ async function newsOlder() {
   renderNews();
 }
 
-{
-  const nf = $("#news-filter");
-  if (nf)
-    nf.addEventListener("click", (e) => {
-      const b = e.target.closest("button");
-      if (!b) return;
-      newsFilter = b.dataset.nk;
-      $$("#news-filter button").forEach((x) => x.classList.toggle("active", x === b));
-      renderNews();
-    });
-}
 
 // ---------------------------------------------------------------- 記録
 async function doCapture(withAI) {
