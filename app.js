@@ -352,7 +352,11 @@ async function renderNews() {
   }
 
   dateEl.textContent = d.date || "";
-  const items = d.items.filter((it) => newsFilter === "all" || it.kind === newsFilter);
+  const items = d.items
+    .filter((it) => newsFilter === "all" || it.kind === newsFilter)
+    .map((it, i) => [it, i])
+    .sort((a, b) => (NEWS_ORDER[a[0].kind] ?? 9) - (NEWS_ORDER[b[0].kind] ?? 9) || a[1] - b[1])
+    .map((x) => x[0]);
   list.innerHTML = items.length
     ? items.map(newsCard).join("")
     : '<div class="card"><div class="meta">この区分の記事はありません。</div></div>';
@@ -371,38 +375,70 @@ async function renderNews() {
 }
 
 function newsCard(it) {
-  const k = NEWS_KIND[it.kind] || { label: it.kind || "", cls: "" };
-  const conf = NEWS_CONF[it.confidence] || "";
+  const c = newsCat(it);
+  const lead = (it.summary || [])[0] || "";
+  const flag =
+    it.confidence && it.confidence !== "high"
+      ? '<span class="np-flag">' + (it.confidence === "low" ? "要検証" : "要確認") + "</span>"
+      : "";
+  return (
+    '<article class="np" data-action="news-detail" data-id="' + esc(it.id || "") + '">' +
+    '<div class="np-kicker" style="--np-c:' + c.color + '">' +
+    '<span class="np-dot"></span>' +
+    '<span class="np-cat">' + esc(c.label) + "</span>" +
+    '<span class="np-src">' + esc(it.source || "") + "</span>" +
+    flag +
+    "</div>" +
+    '<h3 class="np-head">' + esc(it.title || "") + "</h3>" +
+    (lead ? '<p class="np-lead">' + esc(lead) + "</p>" : "") +
+    "</article>"
+  );
+}
+
+/** 記事の区分 → 見出し語と色。新聞の「面」にあたる */
+function newsCat(it) {
+  if (it.kind === "serendipity") return { label: "偶然の一本", color: "var(--amber)" };
+  if (it.author) return { label: it.author, color: "var(--accent)" };
+  if (it.theme === "golf") return { label: "ゴルフ", color: "var(--ok)" };
+  if (it.theme === "entertainment") return { label: "エンタメ", color: "var(--cat-ent)" };
+  return { label: it.kind === "theme" ? "世界から" : "ウォッチ", color: "var(--text-3)" };
+}
+
+const NEWS_ORDER = { watch: 0, theme: 1, serendipity: 2 };
+
+/** 記事の全文をモーダルで開く(新聞の本記にあたる) */
+function newsDetail(id) {
+  const it = newsItem(id);
+  if (!it) return;
+  const c = newsCat(it);
   const url = it.primary_url || it.url || "";
   const meta = [it.source, it.author, it.published].filter(Boolean).map(esc).join(" · ");
-  const summary = (it.summary || []).map((s) => '<div class="news-line">' + esc(s) + "</div>").join("");
-  const sw = it.so_what ? '<div class="news-sowhat">' + esc(it.so_what) + "</div>" : "";
-  const br = it.bridge ? '<div class="news-bridge">↔ ' + esc(it.bridge) + "</div>" : "";
-  const also = (it.also_reported_by || []).length
-    ? '<div class="meta">他: ' + esc(it.also_reported_by.join("、")) + "</div>"
-    : "";
-  const alert = it.injection_alert
-    ? '<div class="news-alert">⚠️ 疑わしい埋め込み指示を検出: ' + esc(it.injection_alert) + "</div>"
-    : "";
-  const why = it.confidence_reason
-    ? '<div class="news-why">確度の根拠: ' + esc(it.confidence_reason) + "</div>"
-    : "";
-  const id = esc(it.id || "");
-  return (
-    '<div class="card news-card"><div>' +
-    '<span class="badge ' + k.cls + '">' + esc(k.label) + "</span>" +
-    (it.confidence ? '<span class="badge ' + conf + '">確度 ' + esc(it.confidence) + "</span>" : "") +
-    (it.tier ? '<span class="badge">tier' + esc(String(it.tier)) + "</span>" : "") +
+  const conf = { high: "確度 高", medium: "確度 中", low: "確度 低" }[it.confidence] || "";
+  $("#modal-title").textContent = c.label;
+  $("#modal-body").innerHTML =
+    '<h3 class="np-head np-head-full" style="--np-c:' + c.color + '">' + esc(it.title || "") + "</h3>" +
+    '<div class="np-meta">' + meta + "</div>" +
+    (it.summary || []).map((s) => '<div class="news-line">' + esc(s) + "</div>").join("") +
+    (it.so_what ? '<div class="news-sowhat">' + esc(it.so_what) + "</div>" : "") +
+    (it.bridge ? '<div class="news-bridge">↔ ' + esc(it.bridge) + "</div>" : "") +
+    (it.injection_alert
+      ? '<div class="news-alert">⚠️ 疑わしい埋め込み指示を検出: ' + esc(it.injection_alert) + "</div>"
+      : "") +
+    '<div class="news-why">' +
+    (conf ? "<b>" + conf + "</b>" + (it.tier ? "・tier" + esc(String(it.tier)) : "") + " — " : "") +
+    esc(it.confidence_reason || "") +
+    ((it.also_reported_by || []).length
+      ? "<br>他の報道: " + esc(it.also_reported_by.join("、"))
+      : "") +
     "</div>" +
-    '<div class="title news-title">' + esc(it.title || "") + "</div>" +
-    '<div class="meta">' + meta + "</div>" +
-    summary + sw + br + also + alert + why +
-    '<div class="actions">' +
-    (url ? '<a class="news-open" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">記事を開く</a>' : "") +
-    '<button data-action="news-deep" data-id="' + id + '">深掘る</button>' +
-    '<button class="warn" data-action="news-hide" data-id="' + id + '">興味なし</button>' +
-    "</div></div>"
-  );
+    '<div class="np-actions">' +
+    (url
+      ? '<a class="news-open" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">記事を開く</a>'
+      : "") +
+    '<button data-action="news-deep" data-id="' + esc(it.id || "") + '">深掘る</button>' +
+    '<button class="warn" data-action="news-hide" data-id="' + esc(it.id || "") + '">興味なし</button>' +
+    "</div>";
+  $("#modal").hidden = false;
 }
 
 function newsItem(id) {
@@ -1074,7 +1110,9 @@ document.addEventListener("click", async (ev) => {
       minutes: parseInt($("#learn-minutes").value),
     });
   }
+  else if (a === "news-detail") { newsDetail(el.dataset.id); }
   else if (a === "news-deep") {
+    $("#modal").hidden = true;
     const it = newsItem(el.dataset.id);
     if (!it) return;
     const q =
@@ -1086,6 +1124,7 @@ document.addEventListener("click", async (ev) => {
   else if (a === "news-hide") {
     const it = newsItem(el.dataset.id);
     if (!it) return;
+    $("#modal").hidden = true;
     await newsFeedback(it, "hide");
     newsData.items = newsData.items.filter((x) => x.id !== it.id);
     renderNews();

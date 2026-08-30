@@ -10,6 +10,7 @@
   --accent-strong: #4c4cc4;
   --accent-soft: #ececfb;
   --violet: #8b5cf6;
+  --cat-ent: #7c3aed;
   --ok: #17a06b;
   --ok-soft: #e3f6ee;
   --amber: #b45309;
@@ -32,6 +33,7 @@
     --accent: #8687e8;
     --accent-strong: #9a9bf0;
     --accent-soft: #26264a;
+    --cat-ent: #a78bfa;
     --ok: #34c48d;
     --ok-soft: #123227;
     --amber: #e8a44c;
@@ -361,28 +363,73 @@ nav#tabbar button.active { color: var(--accent); }
 #pending-badge { cursor: pointer; }
 
 /* ---------- 知る(ニュース) ---------- */
-.news-card .news-title { margin-top: 8px; }
-.news-line { font-size: 13.5px; line-height: 1.75; color: var(--text-2); margin-top: 3px; }
-.news-sowhat {
-  margin-top: 9px; padding: 9px 11px; border-radius: 10px;
-  background: var(--accent-soft); color: var(--accent);
-  font-size: 13px; font-weight: 600; line-height: 1.65;
+/* 一覧は新聞の見出し面。罫線で区切り、カードの箱を積まない */
+#news-list { gap: 0; }
+.np {
+  padding: 15px 2px 17px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.news-bridge {
-  margin-top: 8px; padding: 8px 11px; border-radius: 10px;
-  background: var(--amber-soft); color: var(--amber);
-  font-size: 12.5px; line-height: 1.6;
+.np:first-child { padding-top: 2px; }
+.np:last-child { border-bottom: none; }
+.np:active { opacity: .55; }
+
+.np-kicker {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .01em; margin-bottom: 7px;
 }
-.news-why { margin-top: 8px; font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
-.news-alert {
-  margin-top: 8px; padding: 8px 11px; border-radius: 10px;
-  background: var(--err-soft); color: var(--err); font-size: 12.5px; line-height: 1.6;
+.np-dot { width: 7px; height: 7px; border-radius: 999px; flex: none; background: var(--np-c); }
+.np-cat { color: var(--np-c); flex: none; }
+.np-src {
+  color: var(--text-3); font-weight: 600; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.news-open {
-  padding: 8px 13px; border-radius: 10px; font-size: 13px;
+.np-flag {
+  margin-left: auto; flex: none; font-size: 10.5px; font-weight: 700;
+  color: var(--amber); background: var(--amber-soft);
+  border-radius: 999px; padding: 2px 8px;
+}
+
+.np-head {
+  font-size: 16px; font-weight: 700; line-height: 1.45;
+  letter-spacing: -.01em; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.np-lead {
+  margin-top: 6px; font-size: 13px; line-height: 1.7; color: var(--text-2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* モーダル(本記) */
+.np-head-full {
+  display: block; font-size: 18px; line-height: 1.5; margin-bottom: 8px;
+  padding-left: 11px; border-left: 3px solid var(--np-c);
+}
+.np-meta { font-size: 12px; color: var(--text-3); margin-bottom: 12px; }
+.np-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.np-actions button, .news-open {
+  padding: 9px 14px; border-radius: 10px; font-size: 13px; font-weight: 600;
   border: 1px solid var(--border-strong); background: var(--surface);
-  color: var(--text); font-weight: 600; text-decoration: none;
+  color: var(--text); cursor: pointer; font-family: inherit; text-decoration: none;
   display: inline-flex; align-items: center;
 }
-#news-filter { margin-bottom: 12px; }
-#news-report { margin-top: 12px; }
+.np-actions button.warn { color: var(--err); }
+
+.news-line { font-size: 14px; line-height: 1.85; color: var(--text-2); margin-top: 7px; }
+.news-sowhat {
+  margin-top: 14px; padding: 11px 13px; border-radius: 10px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 13.5px; font-weight: 600; line-height: 1.7;
+}
+.news-bridge {
+  margin-top: 9px; padding: 10px 13px; border-radius: 10px;
+  background: var(--amber-soft); color: var(--amber); font-size: 13px; line-height: 1.7;
+}
+.news-why { margin-top: 13px; font-size: 11.5px; color: var(--text-3); line-height: 1.75; }
+.news-alert {
+  margin-top: 9px; padding: 10px 13px; border-radius: 10px;
+  background: var(--err-soft); color: var(--err); font-size: 12.5px; line-height: 1.6;
+}
+#news-filter { margin-bottom: 4px; }
+#news-report { margin-top: 18px; }
