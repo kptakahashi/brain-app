@@ -22,6 +22,9 @@ const P = {
   vault: "vault/メモ",
   sessions: "vault/メモ/05_セッション",
   research: "vault/メモ/04_事例/リサーチ",
+  newsDir: "brain/news",
+  newsLatest: "brain/news/latest.json",
+  newsFeedback: "brain/news/feedback",
 };
 
 // ---------------------------------------------------------------- ローカル保存(IndexedDB)
@@ -141,6 +144,7 @@ async function syncAll() {
     playlist = Array.isArray(pl.data) ? pl.data : [];
     await DB.set("playlist", playlist);
   } catch {}
+  await checkNewsBadge();
   renderTrainHome();
   refresh();
   updatePendingBadge();
@@ -276,12 +280,188 @@ $$("#tabbar button").forEach((b) => b.addEventListener("click", () => switchView
 
 async function refresh() {
   try {
-    if (view === "capture") await renderCapture();
+    if (view === "news") await renderNews();
+    else if (view === "capture") await renderCapture();
     else if (view === "train") renderTrainHome();
     else if (view === "learn") await renderLearn();
     else if (view === "think") await renderThink();
     else if (view === "explore") await renderExplore();
   } catch {}
+}
+
+
+// ---------------------------------------------------------------- 知る(ニュース)
+let newsData = null;      // 表示中の日のデータ
+let newsDay = null;       // null=latest.json、"YYYY-MM-DD"=その日
+let newsFilter = "all";
+let newsDays = null;      // brain/news にある日付の一覧(降順)
+
+const NEWS_KIND = {
+  watch:       { label: "ウォッチ", cls: "" },
+  theme:       { label: "テーマ",   cls: "done" },
+  serendipity: { label: "偶然",     cls: "running" },
+};
+const NEWS_CONF = { high: "done", medium: "running", low: "error" };
+const NEWS_SEEN_KEY = "brain.news.lastSeen";
+
+async function loadNews(force) {
+  if (newsData && !force) return newsData;
+  const path = newsDay ? P.newsDir + "/" + newsDay + ".json" : P.newsLatest;
+  const { data } = await GH.getJSON(path, null);
+  newsData = data;
+  if (data && data.date) {
+    try { localStorage.setItem(NEWS_SEEN_KEY, data.date); } catch {}
+    const b = $("#news-badge"); if (b) b.hidden = true;
+  }
+  return data;
+}
+
+/** まだ開いていない日のニュースがあればバッジを出す */
+async function checkNewsBadge() {
+  try {
+    const { data } = await GH.getJSON(P.newsLatest, null);
+    if (!data || !data.date) return;
+    let seen = null;
+    try { seen = localStorage.getItem(NEWS_SEEN_KEY); } catch {}
+    const b = $("#news-badge");
+    if (b) { b.textContent = "新"; b.hidden = seen === data.date; }
+  } catch {}
+}
+
+async function renderNews() {
+  const list = $("#news-list");
+  const dateEl = $("#news-date");
+  const report = $("#news-report");
+  if (!newsData) list.innerHTML = '<div class="card"><div class="meta">読み込み中…</div></div>';
+
+  let d;
+  try {
+    d = await loadNews(false);
+  } catch (e) {
+    list.innerHTML = '<div class="card"><div class="title">読み込めませんでした</div><div class="meta">' + esc(e.message) + "</div></div>";
+    return;
+  }
+
+  if (!d || !Array.isArray(d.items)) {
+    dateEl.textContent = "";
+    list.innerHTML =
+      '<div class="card"><div class="title">まだニュースがありません</div>' +
+      '<div class="meta">毎朝5時に自動生成されます。初回はまだ動いていないか、生成に失敗しています。</div></div>';
+    report.innerHTML = "";
+    return;
+  }
+
+  dateEl.textContent = d.date || "";
+  const items = d.items.filter((it) => newsFilter === "all" || it.kind === newsFilter);
+  list.innerHTML = items.length
+    ? items.map(newsCard).join("")
+    : '<div class="card"><div class="meta">この区分の記事はありません。</div></div>';
+
+  // 取得レポート(取れなかったものを隠さない)
+  const fr = d.fetch_report || {};
+  const warns = fr.warnings || [];
+  const failed = fr.sources_failed || [];
+  report.innerHTML =
+    warns.length || failed.length
+      ? '<div class="card"><div class="title">取得できなかったもの</div>' +
+        warns.map((w) => '<div class="meta">' + esc(w) + "</div>").join("") +
+        failed.map((f) => '<div class="meta">✕ ' + esc(f.id || "") + " — " + esc(f.reason || "") + "</div>").join("") +
+        "</div>"
+      : "";
+}
+
+function newsCard(it) {
+  const k = NEWS_KIND[it.kind] || { label: it.kind || "", cls: "" };
+  const conf = NEWS_CONF[it.confidence] || "";
+  const url = it.primary_url || it.url || "";
+  const meta = [it.source, it.author, it.published].filter(Boolean).map(esc).join(" · ");
+  const summary = (it.summary || []).map((s) => '<div class="news-line">' + esc(s) + "</div>").join("");
+  const sw = it.so_what ? '<div class="news-sowhat">' + esc(it.so_what) + "</div>" : "";
+  const br = it.bridge ? '<div class="news-bridge">↔ ' + esc(it.bridge) + "</div>" : "";
+  const also = (it.also_reported_by || []).length
+    ? '<div class="meta">他: ' + esc(it.also_reported_by.join("、")) + "</div>"
+    : "";
+  const alert = it.injection_alert
+    ? '<div class="news-alert">⚠️ 疑わしい埋め込み指示を検出: ' + esc(it.injection_alert) + "</div>"
+    : "";
+  const why = it.confidence_reason
+    ? '<div class="news-why">確度の根拠: ' + esc(it.confidence_reason) + "</div>"
+    : "";
+  const id = esc(it.id || "");
+  return (
+    '<div class="card news-card"><div>' +
+    '<span class="badge ' + k.cls + '">' + esc(k.label) + "</span>" +
+    (it.confidence ? '<span class="badge ' + conf + '">確度 ' + esc(it.confidence) + "</span>" : "") +
+    (it.tier ? '<span class="badge">tier' + esc(String(it.tier)) + "</span>" : "") +
+    "</div>" +
+    '<div class="title news-title">' + esc(it.title || "") + "</div>" +
+    '<div class="meta">' + meta + "</div>" +
+    summary + sw + br + also + alert + why +
+    '<div class="actions">' +
+    (url ? '<a class="news-open" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">記事を開く</a>' : "") +
+    '<button data-action="news-deep" data-id="' + id + '">深掘る</button>' +
+    '<button class="warn" data-action="news-hide" data-id="' + id + '">興味なし</button>' +
+    "</div></div>"
+  );
+}
+
+function newsItem(id) {
+  return ((newsData && newsData.items) || []).find((x) => x.id === id);
+}
+
+async function newsFeedback(it, action) {
+  await queueOrRun({
+    kind: "putFile",
+    path: P.newsFeedback + "/" + stamp() + "_" + action + ".json",
+    text: JSON.stringify(
+      {
+        item_id: it.id,
+        action,
+        theme: it.theme || null,
+        source: it.source || null,
+        date: (newsData && newsData.date) || null,
+        created: new Date().toISOString(),
+      },
+      null,
+      1
+    ),
+    message: "brain-news: feedback " + action,
+  });
+}
+
+async function newsOlder() {
+  if (!newsDays) {
+    try {
+      const files = await GH.listDir(P.newsDir);
+      newsDays = files
+        .filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f.name))
+        .map((f) => f.name.slice(0, 10))
+        .sort()
+        .reverse();
+    } catch {
+      newsDays = [];
+    }
+  }
+  if (!newsDays.length) return toast("過去のニュースがありません");
+  const cur = newsDay || (newsData && newsData.date);
+  const i = newsDays.indexOf(cur);
+  const next = i < 0 ? newsDays[0] : newsDays[i + 1];
+  if (!next) return toast("これ以上さかのぼれません");
+  newsDay = next;
+  newsData = null;
+  renderNews();
+}
+
+{
+  const nf = $("#news-filter");
+  if (nf)
+    nf.addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      newsFilter = b.dataset.nk;
+      $$("#news-filter button").forEach((x) => x.classList.toggle("active", x === b));
+      renderNews();
+    });
 }
 
 // ---------------------------------------------------------------- 記録
@@ -894,6 +1074,25 @@ document.addEventListener("click", async (ev) => {
       minutes: parseInt($("#learn-minutes").value),
     });
   }
+  else if (a === "news-deep") {
+    const it = newsItem(el.dataset.id);
+    if (!it) return;
+    const q =
+      it.title + "(出典: " + (it.source || "") + " " + (it.primary_url || it.url || "") + ")。" +
+      "この動きは何を意味するのか、背景・構造・反証を含めて調べてほしい。";
+    await newsFeedback(it, "deep");
+    createTask("research", (it.title || "").slice(0, 50), { question: q });
+  }
+  else if (a === "news-hide") {
+    const it = newsItem(el.dataset.id);
+    if (!it) return;
+    await newsFeedback(it, "hide");
+    newsData.items = newsData.items.filter((x) => x.id !== it.id);
+    renderNews();
+    toast("次回から出にくくなります");
+  }
+  else if (a === "news-older") newsOlder();
+  else if (a === "news-reload") { newsDay = null; newsData = null; newsDays = null; renderNews(); }
   else if (a === "task-connect") createTask("connect", "点と点を結ぶ分析", { mode: "connect_dots" });
   else if (a === "task-lint") createTask("lint", "週次Lint", { mode: "weekly_lint" });
   else if (a === "task-cards") createTask("cards", "カード生成", { limit: 20 });

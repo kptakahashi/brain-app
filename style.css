@@ -359,3 +359,30 @@ nav#tabbar button.active { color: var(--accent); }
 .run-banner { border-left: 3px solid var(--amber); }
 .run-banner .title { color: var(--amber); }
 #pending-badge { cursor: pointer; }
+
+/* ---------- 知る(ニュース) ---------- */
+.news-card .news-title { margin-top: 8px; }
+.news-line { font-size: 13.5px; line-height: 1.75; color: var(--text-2); margin-top: 3px; }
+.news-sowhat {
+  margin-top: 9px; padding: 9px 11px; border-radius: 10px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 13px; font-weight: 600; line-height: 1.65;
+}
+.news-bridge {
+  margin-top: 8px; padding: 8px 11px; border-radius: 10px;
+  background: var(--amber-soft); color: var(--amber);
+  font-size: 12.5px; line-height: 1.6;
+}
+.news-why { margin-top: 8px; font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
+.news-alert {
+  margin-top: 8px; padding: 8px 11px; border-radius: 10px;
+  background: var(--err-soft); color: var(--err); font-size: 12.5px; line-height: 1.6;
+}
+.news-open {
+  padding: 8px 13px; border-radius: 10px; font-size: 13px;
+  border: 1px solid var(--border-strong); background: var(--surface);
+  color: var(--text); font-weight: 600; text-decoration: none;
+  display: inline-flex; align-items: center;
+}
+#news-filter { margin-bottom: 12px; }
+#news-report { margin-top: 12px; }
