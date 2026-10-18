@@ -20,8 +20,8 @@ const P = {
   done: "brain/tasks/done",
   inbox: "vault/メモ/_inbox",
   vault: "vault/メモ",
-  sessions: "vault/メモ/05_セッション",
-  research: "vault/メモ/04_事例/リサーチ",
+  sessions: "vault/メモ/80_セッション",
+  research: "vault/メモ/70_事例/リサーチ",
   newsDir: "brain/news",
   newsLatest: "brain/news/latest.json",
   newsFeedback: "brain/news/feedback",
@@ -119,6 +119,67 @@ async function boot() {
   switchView(view);
   await loadLocalCaches();
   syncAll();
+  handleSharedIntake();
+}
+
+// ---------------------------------------------------------------- 共有で届いたもの(Kindle ハイライト)
+/** Service Worker が Cache に置いた共有データを取り出し、確認画面を出す */
+async function handleSharedIntake() {
+  const u = new URL(location.href);
+  if (!u.searchParams.has("share")) return;
+  history.replaceState(null, "", "./");
+  let data = null;
+  try {
+    const c = await caches.open("brain-share");
+    const r = await c.match("./share-pending");
+    if (r) {
+      data = await r.json();
+      await c.delete("./share-pending");
+    }
+  } catch {}
+  if (!data || !(data.text || "").trim()) return toast("共有の中身を受け取れませんでした。もう一度共有してください。", 5000);
+  showKindleConfirm(data);
+}
+
+/** 共有テキスト/HTML から書名・著者・件数を推定して表示用にする(保存はワーカーが行う) */
+function guessBook(data) {
+  const t = data.text || "";
+  let book = "", author = "", count = 1;
+  if (data.format === "html") {
+    const bt = t.match(/class="bookTitle"[^>]*>([^<]+)</);
+    const au = t.match(/class="authors"[^>]*>([^<]+)</);
+    book = bt ? bt[1].trim() : "";
+    author = au ? au[1].trim() : "";
+    count = (t.match(/class="noteText"/g) || []).length || 1;
+  } else {
+    // Kindle アプリの共有: 「"引用" — 著者『書名』」や「…(書名)」、amazon リンクなど。取れなければ空のまま
+    const m1 = t.match(/[『「]([^』」]{2,60})[』」]/);
+    const m2 = t.match(/[—–-]\s*([^\n]{2,60})$/m);
+    book = m1 ? m1[1] : "";
+    author = "";
+    if (!book && m2) book = m2[1].trim();
+    count = Math.max(1, (t.match(/\n\s*\n/g) || []).length);
+  }
+  if (!book && data.title) book = data.title.trim();
+  return { book, author, count };
+}
+
+function showKindleConfirm(data) {
+  const g = guessBook(data);
+  const preview = (data.format === "html" ? data.text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") : data.text).slice(0, 240);
+  $("#modal-title").textContent = "読書ハイライトを取り込む";
+  $("#modal-body").innerHTML = `
+    <p class="hint">Kindle から共有された内容を AI が読み、関連するフレームの「参考」として Vault に入れます。書名が違えば直してください。</p>
+    <label class="fld"><span>書名</span><input id="kb-book" value="${esc(g.book)}" placeholder="書名"></label>
+    <label class="fld"><span>著者(任意)</span><input id="kb-author" value="${esc(g.author)}" placeholder="著者"></label>
+    <div class="meta">${data.format === "html" ? "ノートブック(HTML)" : "共有テキスト"} ・ 約${g.count}件 ・ ${(data.text.length / 1000).toFixed(1)}KB</div>
+    <div class="card"><div class="meta">${esc(preview)}…</div></div>
+    <div class="btn-row">
+      <button class="primary" data-action="kindle-send">取り込みを依頼</button>
+      <button class="ghost" data-action="modal-close">やめる</button>
+    </div>`;
+  $("#modal").hidden = false;
+  window._sharedKindle = data;
 }
 
 async function loadLocalCaches() {
@@ -557,9 +618,9 @@ async function renderCapture() {
 }
 
 // 依頼ファイル名(YYYY-MM-DD_HHMMSS_type.json)から経過分数と種類を取り出す
-const TASK_LABEL = { ingest: "記録の判定", research: "リサーチ", connect: "点と点", lint: "週次Lint", learn: "音声生成", cards: "カード生成" };
+const TASK_LABEL = { ingest: "記録の判定", research: "リサーチ", connect: "点と点", lint: "週次Lint", learn: "音声生成", cards: "カード生成", kindle: "読書取り込み" };
 // 実測ベースの目安(分)。これを超えたら詰まっている可能性を伝える
-const TASK_ETA = { ingest: 5, research: 15, connect: 10, lint: 8, learn: 12, cards: 8 };
+const TASK_ETA = { ingest: 5, research: 15, connect: 10, lint: 8, learn: 12, cards: 8, kindle: 12 };
 
 function taskInfo(name) {
   const m = name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})_(\w+)\.json$/);
@@ -1091,6 +1152,23 @@ document.addEventListener("click", async (ev) => {
   else if (a === "capture-raw") doCapture(false);
   else if (a === "mic") toggleMic();
 
+  else if (a === "kindle-send") {
+    const data = window._sharedKindle;
+    if (!data) return toast("共有データがありません");
+    const book = ($("#kb-book").value || "").trim() || "書名不明";
+    const author = ($("#kb-author").value || "").trim();
+    $("#modal").hidden = true;
+    window._sharedKindle = null;
+    createTask("kindle", book.slice(0, 40), {
+      book,
+      author,
+      asin: ((data.text || "").match(/asin=([A-Z0-9]{10})/i) || [])[1] || ((data.url || "").match(/\/dp\/([A-Z0-9]{10})/i) || [])[1] || "",
+      text: data.text,
+      format: data.format,
+      fileName: data.fileName || "",
+      source: "share",
+    });
+  }
   else if (a === "task-research") {
     const q = $("#research-q").value.trim();
     if (!q) return toast("問いを入力してください");

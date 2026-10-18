@@ -6,14 +6,14 @@
  *  - HTMLはネット優先(3秒でタイムアウト→キャッシュ)。PCやGitHubに繋がる時は常に最新。
  *  - GitHub APIと音声Blobはキャッシュしない(アプリ側がIndexedDBで管理)。
  */
-const VERSION = "v19";
+const VERSION = "v20";
 const SHELL = "brain-shell-" + VERSION;
 const FILES = [
   "./",
   "./index.html",
-  "./style.css?v=19",
-  "./app.js?v=19",
-  "./gh.js?v=19",
+  "./style.css?v=20",
+  "./app.js?v=20",
+  "./gh.js?v=20",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
@@ -35,6 +35,40 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+
+  // Android の共有(Web Share Target)。Kindle のハイライト共有・ノートブックのエクスポートを受け取り、
+  // 一時的に Cache に置いてアプリに引き渡す(アプリ側 handleSharedIntake)。解析はしない。
+  if (e.request.method === "POST" && url.pathname.endsWith("/share")) {
+    e.respondWith(
+      (async () => {
+        const fd = await e.request.formData();
+        let text = String(fd.get("text") || "");
+        let format = "text";
+        let fileName = "";
+        for (const f of fd.getAll("files")) {
+          if (f && typeof f.text === "function" && f.size) {
+            text = await f.text();
+            format = /\.html?$/i.test(f.name || "") || /^text\/html/.test(f.type || "") ? "html" : "text";
+            fileName = f.name || "";
+            break;
+          }
+        }
+        const payload = {
+          title: String(fd.get("title") || ""),
+          url: String(fd.get("url") || ""),
+          text,
+          format,
+          fileName,
+          receivedAt: new Date().toISOString(),
+        };
+        const c = await caches.open("brain-share");
+        await c.put("./share-pending", new Response(JSON.stringify(payload), { headers: { "Content-Type": "application/json" } }));
+        return Response.redirect("./?share=1", 303);
+      })()
+    );
+    return;
+  }
+
   if (e.request.method !== "GET") return;
   if (url.origin !== self.location.origin) return; // GitHub APIなどは素通し
 
