@@ -176,10 +176,53 @@ function showKindleConfirm(data) {
     <div class="card"><div class="meta">${esc(preview)}…</div></div>
     <div class="btn-row">
       <button class="primary" data-action="kindle-send">取り込みを依頼</button>
+      ${data.format === "text" ? `<button class="ghost" data-action="kindle-stash">ためておく</button>` : ""}
       <button class="ghost" data-action="modal-close">やめる</button>
-    </div>`;
+    </div>
+    ${data.format === "text" ? `<p class="hint">「ためておく」: 同じ本のハイライトを端末に貯め、記録タブから1回で依頼できます（出版社のエクスポート上限を避ける方法）。</p>` : ""}`;
   $("#modal").hidden = false;
   window._sharedKindle = data;
+}
+
+// ---- 読書バスケット（同じ本のハイライトを端末にためて一括依頼。電波不要）
+async function basketGet() { return (await DB.get("kindleBasket")) || {}; }
+async function basketAdd(book, author, text) {
+  const b = await basketGet();
+  const key = book || "書名不明";
+  b[key] = b[key] || { author: author || "", items: [] };
+  if (author && !b[key].author) b[key].author = author;
+  if (!b[key].items.some((i) => i.text === text)) b[key].items.push({ text, at: new Date().toISOString() });
+  await DB.set("kindleBasket", b);
+  return b[key].items.length;
+}
+async function basketFlush(book) {
+  const b = await basketGet();
+  const e = b[book];
+  if (!e || !e.items.length) return toast("ためたハイライトがありません");
+  const text = e.items.map((i) => i.text.trim()).join("\n\n---\n\n");
+  delete b[book];
+  await DB.set("kindleBasket", b);
+  await createTask("kindle", book.slice(0, 40), { book, author: e.author || "", asin: "", text, format: "text", source: "basket", count: e.items.length });
+}
+async function renderBasket() {
+  const el = $("#kindle-basket");
+  if (!el) return;
+  const b = await basketGet();
+  const books = Object.keys(b).filter((k) => b[k].items.length);
+  if (!books.length) return (el.innerHTML = "");
+  el.innerHTML =
+    `<h2>ためている読書ハイライト</h2>` +
+    books
+      .map(
+        (k) => `<div class="card">
+        <div class="title">『${esc(k)}』 <span class="meta">${b[k].items.length}件${b[k].author ? " ・ " + esc(b[k].author) : ""}</span></div>
+        <div class="meta">${esc(b[k].items[b[k].items.length - 1].text.slice(0, 80))}…</div>
+        <div class="actions">
+          <button class="primary" data-action="kindle-flush" data-book="${esc(k)}">まとめて依頼</button>
+          <button class="warn" data-action="kindle-drop" data-book="${esc(k)}">捨てる</button>
+        </div></div>`
+      )
+      .join("");
 }
 
 async function loadLocalCaches() {
@@ -572,6 +615,12 @@ async function newsOlder() {
 async function doCapture(withAI) {
   const text = $("#capture-text").value.trim();
   if (!text) return toast("テキストを入力してください");
+  if (captureKind === "kindle") {
+    // ブラウザの Kindle ノートブック(read.amazon.co.jp/notebook)やアプリの共有文を貼り付けた場合。
+    // 解析はワーカーに任せ、ここでは書名の確認だけ行う。
+    showKindleConfirm({ format: "text", text, title: "", url: "", fileName: "", source: "paste" });
+    return;
+  }
   const name = `${stamp()}_${captureKind}.md`;
   const body =
     `---\ntype: inbox_raw\nkind: ${captureKind}\ncreated: ${new Date().toISOString()}\n` +
@@ -615,6 +664,7 @@ async function renderCapture() {
     )
     .join("");
   $("#capture-list").innerHTML = html || EMPTY("まだ記録はありません。");
+  renderBasket();
 }
 
 // 依頼ファイル名(YYYY-MM-DD_HHMMSS_type.json)から経過分数と種類を取り出す
@@ -1169,6 +1219,25 @@ document.addEventListener("click", async (ev) => {
       source: "share",
     });
   }
+  else if (a === "kindle-stash") {
+    const data = window._sharedKindle;
+    if (!data) return toast("共有データがありません");
+    const book = ($("#kb-book").value || "").trim() || "書名不明";
+    const author = ($("#kb-author").value || "").trim();
+    $("#modal").hidden = true;
+    window._sharedKindle = null;
+    const n = await basketAdd(book, author, data.text);
+    toast(`『${book}』に ${n} 件ためました。記録タブの「まとめて依頼」で送れます。`, 5000);
+    $("#capture-text").value = "";
+    renderBasket();
+  }
+  else if (a === "kindle-flush") basketFlush(el.dataset.book);
+  else if (a === "kindle-drop") {
+    const b = await basketGet();
+    delete b[el.dataset.book];
+    await DB.set("kindleBasket", b);
+    renderBasket();
+  }
   else if (a === "task-research") {
     const q = $("#research-q").value.trim();
     if (!q) return toast("問いを入力してください");
@@ -1325,6 +1394,14 @@ $("#kind-toggle").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   captureKind = b.dataset.kind;
   $$("#kind-toggle button").forEach((x) => x.classList.toggle("active", x === b));
+  const hint = $("#capture-hint");
+  if (hint)
+    hint.textContent =
+      captureKind === "kindle"
+        ? "Chrome で read.amazon.co.jp/notebook を開き、本を選んでページを全選択→コピーし、ここに貼り付けて「保存してAI判定を依頼」。Kindle アプリの「共有」で来た文を貼ってもよい。書名の確認画面が出ます。"
+        : "文章はすぐGitHubの_inboxに保存されます(電波がなければ端末に貯めて後で自動送信)。分類はClaudeが後から行います。";
+  if (captureKind === "kindle") $("#capture-text").placeholder = "Kindle ノートブックのコピー、または共有されたハイライトを貼り付け";
+  else $("#capture-text").placeholder = "音声入力(キーボードのマイク)またはテキストで吹き込む";
 });
 $("#style-toggle").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;

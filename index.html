@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 
@@ -107,6 +107,7 @@
     <div class="seg" id="kind-toggle">
       <button data-kind="input" class="active">素材<small>読んだ・観た</small></button>
       <button data-kind="thought">自分の考え<small>気づき・仮説</small></button>
+      <button data-kind="kindle">Kindle<small>ハイライト貼り付け</small></button>
     </div>
     <div class="input-card">
       <textarea id="capture-text" rows="5" placeholder="音声入力(キーボードのマイク)またはテキストで吹き込む"></textarea>
@@ -116,7 +117,8 @@
       <button class="primary" data-action="capture-ai">保存してAI判定を依頼</button>
       <button class="ghost" data-action="capture-raw">そのまま保存</button>
     </div>
-    <p class="hint">文章はすぐGitHubの_inboxに保存されます(電波がなければ端末に貯めて後で自動送信)。Layer判定はClaudeが後から行います。</p>
+    <p class="hint" id="capture-hint">文章はすぐGitHubの_inboxに保存されます(電波がなければ端末に貯めて後で自動送信)。分類はClaudeが後から行います。</p>
+    <div id="kindle-basket"></div>
     <h2>最近の記録</h2>
     <div id="capture-list" class="cards"></div>
   </section>
@@ -236,7 +238,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="gh.js?v=20"></script>
-<script src="app.js?v=20"></script>
+<script src="gh.js?v=21"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>
