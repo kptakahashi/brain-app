@@ -1075,7 +1075,7 @@ function quitTrain() {
 const THINK_PROMPT = (topic) => `thinking-session スキルを使って、思考セッションを始めてください。
 
 スキルの「手順0: 文脈をロードする」を必ず実行してから最初の問いを出してください。具体的には:
-1. vault/メモ/_新構造/_AI_DIGEST.md(全ノートの地図)
+1. vault/メモ/00_索引/_AI_DIGEST.md(全ノートの地図)
 2. vault/メモ/_memory/ の全ファイル(過去に確立した原則)
 3. vault/メモ/05_セッション/ の直近3件(前回までの思考の続き)
 これらを読まずに始めないでください。
