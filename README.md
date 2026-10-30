@@ -141,3 +141,17 @@ Claude Codeの **ルーティン**(定期実行)に上と同じ文言を登録�
 - **依頼の記録**: `brain/tasks/`
 
 すべてGitHubにあるため、履歴が残り、いつでも巻き戻せます。
+
+## 開発(PC で画面を直すとき)
+
+コードの変更は PR にし、diff を読んでからマージする(Thinking の `decisions/0008` と同じ考え方)。JS は ESLint が止める。いちばんの狙いは XSS: この画面は GitHub の鍵を端末に保存しているので、データから作る HTML は必ず `esc()` を通す。
+
+```bash
+npm ci                                  # 初回だけ(Node.js LTS が要る)
+git config core.hooksPath .githooks     # 初回だけ。JS を変えた commit で ESLint が走る
+npm run lint                            # 完了と言う前に必ず通す。同じものが CI(.github/workflows/lint.yml)でも走る
+```
+
+- 規則は `eslint.config.mjs`。例外は 1 行ずつ `// eslint-disable-next-line 規則 -- 理由` で書く(理由が無いと止まる。要らなくなった例外も止まる)
+- `innerHTML` の例外 19 か所は、2026-10-30 に全部読んで、差し込む値が `esc()` 済みか数値・固定文字であることを確かめたもの
+- 2 枚目の壁は `index.html` の CSP(`script-src 'self'`)。外さない

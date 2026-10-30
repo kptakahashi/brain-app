@@ -100,10 +100,8 @@ let captureKind = "input";
 let learnStyle = "dialogue";
 let speed = parseFloat(localStorage.getItem("brain_speed") || "1.2");
 let cards = [];          // トレーナーカード(ローカルキャッシュ)
-let cardsSha = null;
 let playlist = [];
 let session = null;
-let online = navigator.onLine;
 let pendingTaskCount = 0;
 
 // ---------------------------------------------------------------- 起動
@@ -144,7 +142,7 @@ async function handleSharedIntake() {
 /** 共有テキスト/HTML から書名・著者・件数を推定して表示用にする(保存はワーカーが行う) */
 function guessBook(data) {
   const t = data.text || "";
-  let book = "", author = "", count = 1;
+  let book, author, count;
   if (data.format === "html") {
     const bt = t.match(/class="bookTitle"[^>]*>([^<]+)</);
     const au = t.match(/class="authors"[^>]*>([^<]+)</);
@@ -168,6 +166,7 @@ function showKindleConfirm(data) {
   const g = guessBook(data);
   const preview = (data.format === "html" ? data.text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") : data.text).slice(0, 240);
   $("#modal-title").textContent = "読書ハイライトを取り込む";
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#modal-body").innerHTML = `
     <p class="hint">Kindle から共有された内容を AI が読み、関連するフレームの「参考」として Vault に入れます。書名が違えば直してください。</p>
     <label class="fld"><span>書名</span><input id="kb-book" value="${esc(g.book)}" placeholder="書名"></label>
@@ -210,6 +209,7 @@ async function renderBasket() {
   const b = await basketGet();
   const books = Object.keys(b).filter((k) => b[k].items.length);
   if (!books.length) return (el.innerHTML = "");
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   el.innerHTML =
     `<h2>ためている読書ハイライト</h2>` +
     books
@@ -237,10 +237,9 @@ async function syncAll() {
   try {
     const c = await GH.getJSON(P.cards, []);
     cards = Array.isArray(c.data) ? c.data : [];
-    cardsSha = c.sha;
     await DB.set("cards", cards);
     setNet(true);
-  } catch (e) {
+  } catch {
     setNet(false);
   }
   try {
@@ -255,7 +254,6 @@ async function syncAll() {
 }
 
 function setNet(ok) {
-  online = ok;
   $("#net-dot").className = "dot " + (ok ? "ok" : "err");
 }
 
@@ -399,12 +397,6 @@ let newsData = null;      // 表示中の日のデータ
 let newsDay = null;       // null=latest.json、"YYYY-MM-DD"=その日
 let newsDays = null;      // brain/news にある日付の一覧(降順)
 
-const NEWS_KIND = {
-  watch:       { label: "ウォッチ", cls: "" },
-  theme:       { label: "テーマ",   cls: "done" },
-  serendipity: { label: "偶然",     cls: "running" },
-};
-const NEWS_CONF = { high: "done", medium: "running", low: "error" };
 const NEWS_SEEN_KEY = "brain.news.lastSeen";
 
 async function loadNews(force) {
@@ -459,6 +451,7 @@ async function renderNews() {
     .map((it, i) => [it, i])
     .sort((a, b) => (NEWS_ORDER[a[0].kind] ?? 9) - (NEWS_ORDER[b[0].kind] ?? 9) || a[1] - b[1])
     .map((x) => x[0]);
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   list.innerHTML = items.length
     ? newsListHtml(items)
     : '<div class="card"><div class="meta">記事がありません。</div></div>';
@@ -468,6 +461,7 @@ async function renderNews() {
   const warns = fr.warnings || [];
   const failed = fr.sources_failed || [];
   const nOk = (fr.sources_ok || []).length;
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   report.innerHTML =
     warns.length || failed.length
       ? '<details class="np-report"><summary>取得状況: ' + nOk + "件成功・" + failed.length +
@@ -537,6 +531,7 @@ function newsDetail(id) {
   const meta = [it.source, it.author, it.published].filter(Boolean).map(esc).join(" · ");
   const conf = { high: "確度 高", medium: "確度 中", low: "確度 低" }[it.confidence] || "";
   $("#modal-title").textContent = c.label;
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#modal-body").innerHTML =
     '<h3 class="np-head np-head-full" style="--np-c:' + c.color + '">' + esc(it.title || "") + "</h3>" +
     '<div class="np-meta">' + meta + "</div>" +
@@ -663,6 +658,7 @@ async function renderCapture() {
         </div></div>`
     )
     .join("");
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#capture-list").innerHTML = html || EMPTY("まだ記録はありません。");
   renderBasket();
 }
@@ -684,7 +680,6 @@ function taskInfo(name) {
 // ---------------------------------------------------------------- 探る
 async function renderExplore() {
   const t = await listTasks();
-  const label = TASK_LABEL;
   let html = "";
   if (t.pending.length) {
     const infos = t.pending.map((f) => taskInfo(f.name));
@@ -738,6 +733,7 @@ async function renderExplore() {
     </div>`;
     })
     .join("");
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#explore-tasks").innerHTML = html || EMPTY("依頼はありません。");
 
   let notes = [];
@@ -745,6 +741,7 @@ async function renderExplore() {
     notes = (await GH.listDir(P.research)).filter((f) => f.name.endsWith(".md"));
   } catch {}
   notes.sort((a, b) => (a.name < b.name ? 1 : -1));
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#research-notes").innerHTML =
     notes
       .slice(0, 10)
@@ -764,6 +761,7 @@ async function renderExplore() {
 // ---------------------------------------------------------------- 聴く
 async function renderLearn() {
   const keys = (await DB.audioKeys()) || [];
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#playlist").innerHTML =
     playlist
       .map((a) => {
@@ -805,6 +803,7 @@ async function loadNoteTree() {
   } catch {
     noteTree = (await DB.get("noteTree")) || [];
     if (!noteTree.length) {
+      // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
       box.innerHTML = EMPTY("一覧を取得できませんでした(オフラインの可能性)");
       return;
     }
@@ -815,6 +814,7 @@ async function loadNoteTree() {
 function renderNoteList(filter) {
   const q = filter.trim().toLowerCase();
   const hits = (noteTree || []).filter((n) => !q || n.name.toLowerCase().includes(q) || n.dir.toLowerCase().includes(q));
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#note-list").innerHTML =
     hits
       .slice(0, 60)
@@ -867,11 +867,11 @@ function dueCards() {
 
 function renderTrainHome() {
   if (session) return;
-  const t = today();
   const due = dueCards().length;
   const mature = cards.filter((c) => (c.srs?.interval || 0) >= 21).length;
   const el = $("#train-stats");
   if (el) {
+    // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
     el.innerHTML = `
       <div class="stat"><div class="num accent">${due}</div><div class="lbl">今日の復習</div></div>
       <div class="stat"><div class="num">${mature}</div><div class="lbl">定着済</div></div>
@@ -881,6 +881,7 @@ function renderTrainHome() {
   if (btn) btn.disabled = cards.length === 0;
   const info = $("#train-info");
   if (info) {
+    // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
     info.innerHTML = cards.length
       ? ""
       : EMPTY("カードがまだありません。「＋ Vaultから追加を依頼」を押すと、Claudeがあなたのフレームからカードを作ります。");
@@ -1001,9 +1002,11 @@ function renderQuiz() {
        ${c.use_when ? `<div class="a-use">発動条件: ${esc(c.use_when)}</div>` : ""}
        ${c.note ? `<span class="note-link" data-action="open-note" data-path="${esc(P.vault + "/" + c.note)}">元ノートを見る →</span>` : ""}`
     : "";
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#train-card").innerHTML = `<div class="q-type">${session.idx + 1} / ${session.cards.length} ・ ${MODE_LABEL[c.mode]}</div>${front}${back}`;
   $("#train-progress-bar").style.width = `${(session.idx / session.cards.length) * 100}%`;
   $("#train-count").textContent = `${session.cards.length - session.idx}枚`;
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#train-actions").innerHTML = session.revealed
     ? `<button class="g-again" data-action="grade" data-g="again">もう一度<small>思い出せず</small></button>
        <button class="g-good" data-action="grade" data-g="good">できた<small>数秒かかった</small></button>
@@ -1032,6 +1035,7 @@ function grade(g) {
 }
 
 async function finishTrain() {
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#train-card").innerHTML = `<div class="done-card"><div class="big">🎉</div>
     <div class="q-front">今日の練習完了</div>
     <div class="q-sub">${session.answers.length}回想起 ・ つまずき${session.again}回<br>結果を保存しています…</div></div>`;
@@ -1042,6 +1046,7 @@ async function finishTrain() {
   const sent = await queueOrRun({ kind: "cardsSync", answers });
   const note = $("#train-card .q-sub");
   if (note) {
+    // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
     note.innerHTML = `${answers.length}回想起 ・ つまずき${session.again}回<br>` +
       (sent ? "結果を保存しました。" : "結果は端末に保存済み。接続時に自動送信します。");
   }
@@ -1093,6 +1098,7 @@ async function renderThink() {
     if (months[0]) items = (await GH.listDir(months[0].path)).filter((f) => f.name.endsWith(".md"));
   } catch {}
   items.sort((a, b) => (a.name < b.name ? 1 : -1));
+  // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
   $("#think-list").innerHTML =
     items
       .slice(0, 10)
@@ -1141,6 +1147,7 @@ async function openNote(path) {
     const f = await GH.getFile(path);
     if (!f) return toast("ノートが見つかりません");
     $("#modal-title").textContent = path.split("/").pop().replace(/\.md$/, "");
+    // eslint-disable-next-line no-unsanitized/property -- 組み立て済みの HTML。差し込む値は esc() 済みか数値・固定文字(2026-10-30 に全件確認)
     $("#modal-body").innerHTML = mdToHtml(f.text);
     $("#modal").hidden = false;
   } catch (e) {
