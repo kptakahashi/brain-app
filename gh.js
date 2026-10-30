@@ -6,6 +6,7 @@
  */
 "use strict";
 
+/* exported GH -- app.js が使う(index.html で先に読み込む) */
 const GH = (() => {
   const CFG_KEY = "brain_gh";
   const API = "https://api.github.com";
@@ -90,7 +91,7 @@ const GH = (() => {
     let res;
     try {
       res = await fetch(url, opts);
-    } catch (e) {
+    } catch {
       throw new GHError("オフライン(GitHubに接続できません)", 0);
     }
     if (res.status === 401 || res.status === 403) {
