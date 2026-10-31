@@ -2,6 +2,9 @@
 # JS を変えた commit だけ ESLint を回す(数秒)。有効化は 1 回だけ:  git config core.hooksPath .githooks
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-git diff --cached --name-only | grep -q -E '\.(js|mjs)$|^package(-lock)?\.json$' || exit 0
+# grep -q には here-string で渡す。パイプだと pipefail の下で grep が早く抜けたとき上流が SIGPIPE で失敗し、
+# 「該当なし」扱いになって ESLint が飛ばされる(stage したファイルが多いと起きる)
+staged=$(git diff --cached --name-only)
+grep -q -E '\.(js|mjs)$|^package(-lock)?\.json$' <<<"$staged" || exit 0
 command -v npx >/dev/null 2>&1 || { echo "pre-commit: Node.js がありません(README の「開発」)" >&2; exit 1; }
 npx --no-install eslint . || { echo "pre-commit: ESLint が通りません。直してから再ステージしてください" >&2; exit 1; }
